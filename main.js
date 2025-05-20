@@ -1,100 +1,81 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { HallwayGenerator } from './hallwayGenerator.js';
+import { WallObjectGenerator } from './hallwayObjects.js';
+import { HallwayLights } from './hallwayLights.js';
 
 // Scene setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.Fog(0x000000, 5, 30);
+scene.background = new THREE.Color(0x101018);
+scene.fog = new THREE.Fog(0x000000, 5, 35);
 
 // Camera setup
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.y = 1.7; // Eye level
-
+camera.position.y = 1.7;
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-// Lighting
-const ambientLight = new THREE.AmbientLight(0x404040);
+// Lighting (Ambient)
+const ambientLight = new THREE.AmbientLight(0x303040, 0.6);
 scene.add(ambientLight);
-
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-directionalLight.position.set(1, 1, 1);
-scene.add(directionalLight);
-
-// Add point lights in the hallway
-const createPointLight = (position) => {
-    const light = new THREE.PointLight(0xffaa55, 0.8, 15);
-    light.position.copy(position);
-    light.position.y += 2.5; // Position lights on the ceiling
-    light.castShadow = true;
-    scene.add(light);
-    return light;
-};
 
 // Controls
 const controls = new PointerLockControls(camera, document.body);
 
+// Hallway Configuration
+const segmentLength = 5;
+const hallwayWidth = 3;
+const hallwayHeight = 3;
+
+// Create hallway generator
+const hallwayGenerator = new HallwayGenerator(scene, {
+    segmentLength: segmentLength,
+    hallwayWidth: hallwayWidth,
+    hallwayHeight: hallwayHeight,
+    maxSegmentsInMemory: 60, 
+    generationTriggerFactor: 5, 
+    visibleDistance: 40, 
+    minTurnSegments: 4,
+    maxTurnSegments: 8,
+});
+
+// Create and add wall generator
+const wallGenerator = new WallObjectGenerator({
+    hallwayWidth: hallwayWidth,
+    hallwayHeight: hallwayHeight,
+});
+hallwayGenerator.addObjectGenerator(wallGenerator);
+
+// Initialize hallway (generates initial segments)
+hallwayGenerator.initialize();
+
+// Create Hallway Lights manager
+const hallwayLights = new HallwayLights(scene, hallwayGenerator, {
+    maxLights: 12,
+    lightColor: 0xffeedd, 
+    lightIntensity: 1.2,
+    lightDistance: 18,
+    lightVisibilityDistance: 45, 
+    lightHeightOffset: hallwayHeight - 0.4, 
+});
+
 // Movement variables
-const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 let moveForward = false;
 let moveBackward = false;
 let moveLeft = false;
 let moveRight = false;
 
-let genStrengthFix = 0;
-
-// Create hallway generator
-const hallwayGenerator = new HallwayGenerator(scene, 5); // Generate 50 segments ahead to start
-const lights = [];
-
-// Initialize hallway
-hallwayGenerator.initialize();
-
-// Update player position and hallway based on movement
-function updatePosition() {
+// Update game logic
+function updateGameLogic() {
     const playerPosition = controls.getObject().position;
-    
-    // Check if player has moved far enough to generate new segments
     hallwayGenerator.update(playerPosition);
-
-    
-    // Update lights based on player position
-    updateLights(playerPosition);
-}
-
-function debugConsole() {
-    const playerPosition = controls.getObject().position;
-    console.log((hallwayGenerator.getVisibleSegments(playerPosition).length) + " segments visible");
-    console.log(hallwayGenerator.segments.length + " segments total");
-}
-
-// Manage lights - create and remove as player moves
-function updateLights(playerPosition) {
-    // Remove distant lights
-    for (let i = lights.length - 1; i >= 0; i--) {
-        if (lights[i].position.distanceTo(playerPosition) > 30) {
-            lights[i].visible = false;
-            lights.splice(i, 1);
-        }
-    }
-
-    
-    
-    // Add new lights near the player
-    const segments = hallwayGenerator.getVisibleSegments(playerPosition);
-    for (const segment of segments) {
-        if (segment.needsLight && lights.length < 10) { // Limit the number of lights
-            const light = createPointLight(segment.center);
-            lights.push(light);
-            segment.needsLight = false;
-        }
-    }
+    hallwayLights.update(playerPosition);
 }
 
 // Event listeners
@@ -114,43 +95,19 @@ controls.addEventListener('unlock', function () {
 
 document.addEventListener('keydown', function (event) {
     switch (event.code) {
-        case 'KeyW':
-        case 'ArrowUp':
-            moveForward = true;
-            break;
-        case 'KeyA':
-        case 'ArrowLeft':
-            moveLeft = true;
-            break;
-        case 'KeyS':
-        case 'ArrowDown':
-            moveBackward = true;
-            break;
-        case 'KeyD':
-        case 'ArrowRight':
-            moveRight = true;
-            break;
+        case 'KeyW': case 'ArrowUp': moveForward = true; break;
+        case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+        case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+        case 'KeyD': case 'ArrowRight': moveRight = true; break;
     }
 });
 
 document.addEventListener('keyup', function (event) {
     switch (event.code) {
-        case 'KeyW':
-        case 'ArrowUp':
-            moveForward = false;
-            break;
-        case 'KeyA':
-        case 'ArrowLeft':
-            moveLeft = false;
-            break;
-        case 'KeyS':
-        case 'ArrowDown':
-            moveBackward = false;
-            break;
-        case 'KeyD':
-        case 'ArrowRight':
-            moveRight = false;
-            break;
+        case 'KeyW': case 'ArrowUp': moveForward = false; break;
+        case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+        case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+        case 'KeyD': case 'ArrowRight': moveRight = false; break;
     }
 });
 
@@ -160,8 +117,7 @@ window.addEventListener('resize', function () {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Movement variables
-const speed = 40.0;
+const playerSpeed = 5.0; 
 const clock = new THREE.Clock();
 
 // Animation loop
@@ -171,27 +127,22 @@ function animate() {
     if (controls.isLocked) {
         const delta = clock.getDelta();
 
-        // Calculate velocity based on movement keys
-        velocity.x = 0;
-        velocity.z = 0;
-
         direction.z = Number(moveForward) - Number(moveBackward);
         direction.x = Number(moveRight) - Number(moveLeft);
-        direction.normalize();
+        
+        // Normalize for consistent speed, only if there's movement
+        if (direction.x !== 0 || direction.z !== 0) {
+            direction.normalize();
+        }
 
-        if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
-        if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
+        const currentSpeedDelta = playerSpeed * delta;
+        if (direction.z !== 0) controls.moveForward(direction.z * currentSpeedDelta);
+        if (direction.x !== 0) controls.moveRight(direction.x * currentSpeedDelta);
 
-        // Update controls
-        controls.moveRight(-velocity.x);
-        controls.moveForward(-velocity.z);
-
-        // Update hallway based on new position
-        updatePosition();
+        updateGameLogic();
     }
 
     renderer.render(scene, camera);
 }
 
 animate();
-setInterval(debugConsole, 1000);
