@@ -195,4 +195,3 @@ function animate() {
 
 animate();
 setInterval(debugConsole, 1000);
-
