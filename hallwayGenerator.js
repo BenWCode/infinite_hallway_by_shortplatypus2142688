@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-let genFactor = 5;
+let genFactor = 6;
 
 export class HallwayGenerator {
     constructor(scene, maxSegments = 5) {
